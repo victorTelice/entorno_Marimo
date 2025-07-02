@@ -1,0 +1,16 @@
+# Ignorar entorno virtual
+venv/
+Lib/
+Include/
+Scripts/
+__pycache__/
+__marimo__/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de Python
+*.pyc
+*.pyo
+*.pyd
