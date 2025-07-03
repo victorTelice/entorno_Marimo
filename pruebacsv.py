@@ -91,6 +91,7 @@ def _(df, pd):
     )
 
     fig.show()
+    fig
     return (px,)
 
 
@@ -143,6 +144,7 @@ def _(df, px):
         legend=dict(orientation="h", yanchor="bottom", y=-0.3),
     )
     fig2.show()
+    fig2
     return
 
 
@@ -179,6 +181,7 @@ def _(df_long, px):
 
     fig3.update_layout(barmode="stack")
     fig3.show()
+    fig3
     return
 
 
@@ -209,9 +212,8 @@ def _(df, pd):
     )
     plt.title("Superficie de centros de consumo por tipo de centro (m²)")
     plt.axis("equal")  # Mantiene forma circular
-    plt.tight_layout()
-    plt.show()
-
+    grafica=plt.subplot()
+    grafica
     return
 
 
