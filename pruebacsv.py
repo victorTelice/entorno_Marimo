@@ -46,10 +46,7 @@ def _(mo):
 
 @app.cell
 def _(mo, num, num_suministros, num_suministros_gas, num_suministros_gasol):
-
-    mo.md(f"Centros de consumo energético\n\nNum centros: {num}\n\nNum Suministros electricos: {num_suministros}\n\nNum Suministros gas natural: {num_suministros_gas}\n\nNum Suministros gasoleo: {num_suministros_gasol}")
-
-
+    mo.md(f"""Centros de consumo energético\n\nNum centros: {num}\n\nNum Suministros electricos: {num_suministros}\n\nNum Suministros gas natural: {num_suministros_gas}\n\nNum Suministros gasoleo: {num_suministros_gasol}""")
     return
 
 
