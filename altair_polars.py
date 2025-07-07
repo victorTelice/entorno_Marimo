@@ -1,7 +1,10 @@
 import marimo
 
-__generated_with = "0.14.10"
-app = marimo.App(width="medium")
+__generated_with = "0.14.9"
+app = marimo.App(
+    width="medium",
+    layout_file="layouts/altair_polars.slides.json",
+)
 
 
 @app.cell
@@ -20,7 +23,10 @@ def importaciones():
     import pandas as pd
     import vegafusion as vf
     from vega_datasets import data
-    return alt, mo, pd, pl, ui
+    import folium
+    from folium import plugins
+    from folium.plugins import HeatMap
+    return HeatMap, alt, folium, mo, pl, plugins, ui
 
 
 @app.cell
@@ -28,9 +34,14 @@ def contenido_pestanhas(
     Grafica_Barra_Lateral,
     Grafica_Barras_Verticales,
     Grafica_Circular,
+    Mapa,
     Tabla_Consumo_Anual,
+    Tabla_Consumo_Centros,
+    Tabla_Sumas_Centro,
+    concatenado,
     dataframe_stats,
     dataframes,
+    energía_df,
     grupo_estadisticas,
     grupo_stats,
     mo,
@@ -42,12 +53,15 @@ def contenido_pestanhas(
     tab1 = (mo.vstack([
         grupo_estadisticas(stats(grupo_stats)),
         Grafica_Barra_Lateral(dataframe_stats),
+        Mapa(energía_df, tipo_mapa=1),
         Grafica_Barras_Verticales(organismos_ener),
+        Tabla_Sumas_Centro(concatenado,ancho=600),
         Tabla_Consumo_Anual(),
-        Grafica_Circular(superficie_ener)
+        Grafica_Circular(superficie_ener),
+        Tabla_Consumo_Centros()
 
     ]),
-    
+
 
         )
     tab5 = mo.vstack([seleccion_tabla,dataframes[seleccion_tabla.value]])
@@ -55,17 +69,12 @@ def contenido_pestanhas(
 
 
 @app.cell
-def obtencion_df(depuradoDF, pd, pl):
+def obtencion_df(depuradoDF, pl):
     # Lee CSV completo de forma rápida
     energía_df = depuradoDF(pl.read_parquet("energia.parquet"))
     electricidad_df = depuradoDF(pl.read_parquet("electricidad.parquet"))
     gas_df = depuradoDF(pl.read_parquet("gas.parquet"))
     gasoil_df = depuradoDF(pl.read_parquet("gasoil.parquet"))
-
-
-    electricidad_df_pandas = pd.read_csv("electricidad.csv", sep=';')
-
-
 
     return electricidad_df, energía_df, gas_df, gasoil_df
 
@@ -154,12 +163,12 @@ def calculo_estadisticas(electricidad_df, energía_df, gas_df, gasoil_df):
 @app.cell
 def _(alt, mo):
     def Grafica_Barra_Lateral(source):   
-         
+
         barra_lateral=alt.Chart(source).mark_bar(color="red").encode(
             x=alt.X("Valores:Q", axis=None),
             y=alt.Y("Labels:N")
         )
-    
+
         # Agregar etiquetas dentro de las barras (las categorías)
         etiquetas = alt.Chart(source).mark_text(
             align='left',
@@ -172,7 +181,7 @@ def _(alt, mo):
             y="Labels:N",
             text="Valores"
         )
-    
+
         # Combinar gráfico de barras con etiquetas
         grafica = (barra_lateral + etiquetas).properties(
             width=400,
@@ -202,10 +211,6 @@ def dataframe_estadisticas(
 def _(alt, mo):
     def Grafica_Barras_Verticales(source, ancho=800):
 
-        # Eliminar columnas binarias
-    
-
-        # Chart con ancho personalizado
         grafica = (
             alt.Chart(source)
             .mark_bar()
@@ -215,8 +220,8 @@ def _(alt, mo):
                         title='Consumo mensual total (kWh)')
             )
             .properties(
-                width=ancho,      # aquí defines el ancho
-                height=400,       # opcional: también puedes ajustar alto
+                width=ancho,      
+                height=400,       
                 title="Consumo por organismo o consejería"
             )
         )
@@ -247,25 +252,144 @@ def datos_graficas(energía_df, pl):
 
 
 @app.cell
-def _(gas_df, mo):
-    mo.ui.table(data=gas_df)
-    return
-
-
-@app.cell
 def _(electricidad_df, gas_df, gasoil_df, mo, pl):
     def Tabla_Consumo_Anual():
-        df1=electricidad_df.group_by("ano").agg(pl.col("consumo_mensual_energia_activa_total_kwh").sum()).sort("ano")
-        df2=gas_df.group_by("ano").agg(pl.col("consumo_mensual_total_gas_natural_kwh").sum()).sort("ano").drop("ano")
-        df3=gas_df.group_by("ano").agg(pl.col("g_d_en_base_20").sum()).sort("ano").drop("ano")
-        df4=gas_df.group_by("ano").agg(pl.col("g_d_en_base_26").sum()).sort("ano").drop("ano")
-        df5=gasoil_df.group_by("ano").agg(pl.col("consumo_mensual_total_gsl_m3_gasoleo_c").sum()).sort("ano").drop("ano")
+        df1=electricidad_df.group_by("ano").agg(pl.col("consumo_mensual_energia_activa_total_kwh").sum())
+        df2=gas_df.group_by("ano").agg(pl.col("consumo_mensual_total_gas_natural_kwh").sum())
+        df3=gas_df.group_by("ano").agg(pl.col("g_d_en_base_20").sum())
+        df4=gas_df.group_by("ano").agg(pl.col("g_d_en_base_26").sum())
+        df5=gasoil_df.group_by("ano").agg(pl.col("consumo_mensual_total_gsl_m3_gasoleo_c").sum())
     
-        tabla=mo.ui.table(pl.concat([df1,df2,df3,df4,df5],how='horizontal')) 
+        tabla=mo.ui.table(pl.concat([df1,df2,df3,df4,df5],how='align'))
 
         return tabla
 
     return (Tabla_Consumo_Anual,)
+
+
+@app.cell
+def _(electricidad_df, energía_df, gas_df, gasoil_df, mo, pl):
+    def Tabla_Consumo_Centros():
+
+        df0=energía_df.group_by("tipo_de_centro_a_nivel_de_administracion_autonomica").len()
+        df1=electricidad_df.group_by("tipo_de_centro_a_nivel_de_administracion_autonomica").agg(pl.col("consumo_mensual_energia_activa_total_kwh").sum())
+        df2=gas_df.group_by("tipo_de_centro_a_nivel_de_administracion_autonomica").agg(pl.col("consumo_mensual_total_gas_natural_kwh").sum())
+
+        df3=gasoil_df.group_by("tipo_de_centro_a_nivel_de_administracion_autonomica").agg(pl.col("consumo_mensual_total_gsl_m3_gasoleo_c").sum())
+    
+        tabla=mo.ui.table(pl.concat([df0,df1,df2,df3],how='align'))
+
+        return tabla
+
+    return (Tabla_Consumo_Centros,)
+
+
+@app.cell
+def _(HeatMap, folium, pl, plugins):
+    def Mapa(source, tipo_mapa):    
+        energia_renombrada = source.rename({
+            'coordenada_x_longitud': 'longitud',
+            'coordenada_y_latitud': 'latitud'
+        })
+    
+        # Convertir coordenadas a numérico y eliminar filas no válidas
+        energia_renombrada = energia_renombrada.with_columns([
+            pl.col('longitud').cast(pl.Float64, strict=False),
+            pl.col('latitud').cast(pl.Float64, strict=False)
+        ]).drop_nulls(['longitud', 'latitud'])
+    
+        # Filtrar coordenadas dentro del rango geográfico de Castilla y León
+        energia_renombrada = energia_renombrada.filter(
+            (pl.col('longitud') >= -10) & (pl.col('longitud') <= 5) &
+            (pl.col('latitud') >= 35) & (pl.col('latitud') <= 45)
+        )
+    
+        # Eliminar duplicados
+        coordenadas_unicas = energia_renombrada.select(['latitud', 'longitud']).unique()
+    
+        # Crear el mapa centrado en Castilla y León
+        mapa = folium.Map(location=[41.65, -4.72], zoom_start=8)
+
+        if tipo_mapa == 0 :
+
+            plugins.MarkerCluster(coordenadas_unicas.transpose()).add_to(mapa)
+
+        elif tipo_mapa == 1 :
+
+            HeatMap(coordenadas_unicas.transpose()).add_to(mapa)
+
+            print("Hola mundo")
+    
+    
+    
+
+        return mapa
+    
+
+    return (Mapa,)
+
+
+@app.cell
+def calculo_tabla_sumas(energía_df, pl):
+     # Agrupar y sumar la columna 'cups_e'
+    cups_e = (
+        energía_df
+        .group_by("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .agg(pl.col("cups_e").sum())
+        .drop_nulls()
+        .sort("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .rename({"cups_e": "suma"})
+        .with_columns(tipo=0)
+    )
+
+    # Agrupar y sumar la columna 'cups_gn'
+    cups_gn = (
+        energía_df
+        .group_by("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .agg(pl.col("cups_gn").sum())
+        .drop_nulls()
+        .sort("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .rename({"cups_gn": "suma"})
+        .with_columns(tipo=1)
+    )
+
+    # Agrupar y sumar la columna 'gsl'
+    gsl = (
+        energía_df
+        .group_by("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .agg(pl.col("gsl").sum())
+        .drop_nulls()
+        .sort("tipo_de_centro_a_nivel_de_administracion_autonomica")
+        .rename({"gsl": "suma"})
+        .with_columns(tipo=2)
+    )
+
+    # Concatenar los DataFrames verticalmente
+    concatenado = pl.concat([cups_e, cups_gn, gsl], how="vertical")
+
+    # Convertir la columna 'tipo' a string
+    concatenado = concatenado.with_columns(concatenado["tipo"].cast(pl.Utf8))
+
+    concatenado = concatenado.with_columns([pl.col("tipo").str.replace(pattern="0",value="cups_e")])
+    concatenado = concatenado.with_columns([pl.col("tipo").str.replace(pattern="1",value="cups_gn")])
+    concatenado = concatenado.with_columns([pl.col("tipo").str.replace(pattern="2",value="gsl")])
+
+    return (concatenado,)
+
+
+@app.cell
+def _(alt, mo):
+    def Tabla_Sumas_Centro(source,ancho):
+        grafica = alt.Chart(source).mark_bar().encode(
+            x="suma:Q",
+            y="tipo_de_centro_a_nivel_de_administracion_autonomica",
+            color="tipo",
+        ).properties(width=ancho)
+
+        plot = mo.ui.altair_chart(grafica)
+
+        return plot
+    return (Tabla_Sumas_Centro,)
 
 
 if __name__ == "__main__":
