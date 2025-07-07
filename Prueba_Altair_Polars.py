@@ -23,13 +23,22 @@ def _():
                 fout.write(line[:-1] + "\n")
             else:
                 fout.write(line)
+
+    with open("entorno_marimo/Docs/bombas2.txt", "r") as fin, open("entorno_marimo/Docs/bombas2_clean.txt", "w") as fout:
+        for line in fin:
+            if line.endswith(",\n"):
+                fout.write(line[:-2] + "\n")
+            elif line.endswith(","):
+                fout.write(line[:-1] + "\n")
+            else:
+                fout.write(line)
     return
 
 
 @app.cell
 def _(
+    BBar,
     amplitud,
-    explorador,
     fig_BVDer,
     fig_BVIzq,
     fig_T1_T4,
@@ -39,14 +48,12 @@ def _(
 ):
     vistaIzq = mo.vstack([fig_BVIzq, fig_T1_T4])
     vistaDer = mo.vstack([fig_BVDer, fig_T2_T3])
-    vistaCuadrado = mo.hstack([vistaIzq, vistaDer])
-    senoInteractivo = mo.hstack([fig_seno,amplitud])
+    vistaCuadrado = mo.hstack([vistaIzq, vistaDer], justify = "space-around", align = "center")
+    senoInteractivo = mo.hstack([fig_seno,amplitud], justify = "space-around", align = "center")
 
     tabs = mo.ui.tabs({
-        "Elementos lado izquierdo": vistaIzq,
-        "Elementos lado derecho": vistaDer,
-        "Todos los elementos": vistaCuadrado,
-        "Explorador de datos": explorador,
+        "Simulación 1": [vistaCuadrado],
+        "Comparación" : BBar,
         "Senos" : senoInteractivo
     })
     tabs
@@ -55,14 +62,34 @@ def _(
 
 @app.cell
 def _(pl):
+    def truncar (database: pl.DataFrame, x: float):
+
+        fila = x*1+0-1
+        fila = int(fila)
+        return database.head(fila)
+
+    return (truncar,)
+
+
+@app.cell
+def _(pl, truncar):
     tanques_df = pl.read_csv(
         "entorno_marimo/Docs/bombas_clean.txt",
         separator =";",
         infer_schema_length=1000
         )
 
+    tanques2_df = pl.read_csv(
+        "entorno_marimo/Docs/bombas2_clean.txt",
+        separator = ";",
+        infer_schema_length=1000
+    )
+
+    tanques_df = truncar(tanques_df, 634)
+    tanques2_df = truncar(tanques2_df, 634)
     print(tanques_df)
-    return (tanques_df,)
+    print(tanques2_df)
+    return tanques2_df, tanques_df
 
 
 @app.cell
@@ -118,7 +145,7 @@ def _(createFig, tanques_df):
 @app.cell
 def data_explorer(mo, tanques_df):
     explorador = mo.ui.data_explorer(tanques_df)
-    return (explorador,)
+    return
 
 
 @app.cell
@@ -149,6 +176,32 @@ def _(amplitud, crearSeno, createFig):
     fig_seno = createFig(seno_df, "x", "seno", 'red')
 
     return (fig_seno,)
+
+
+@app.cell
+def _(tanques2_df, tanques_df):
+    tanques_merged_df = tanques_df.join(tanques2_df, on = "Time", how = "inner", suffix = "_2")
+
+    print(tanques_merged_df)
+    return (tanques_merged_df,)
+
+
+@app.cell
+def _(alt, pl, tanques_merged_df):
+    max_BIz = tanques_merged_df["leftPump"].max()
+    max_BIz_2 = tanques_merged_df["leftPump_2"].max()
+
+    dataBBar = pl.DataFrame({
+        "Etiqueta" : ["Valor maximo bomba 1", "Valor maximo bomba 2"],
+        "Valor" : [max_BIz, max_BIz_2]
+    })
+
+    BBar = alt.Chart(dataBBar).mark_bar(color = 'blue', size = 50).encode(
+        x="Etiqueta",
+        y="Valor"   
+    )
+
+    return (BBar,)
 
 
 if __name__ == "__main__":
